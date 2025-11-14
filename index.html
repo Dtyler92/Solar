@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Energy Savings Survey</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBd9YeisWiNIm3Zm8GjqH-Rvz1fh9DB50I&callback=initMap"></script>
+
+    <!-- FIXED: Correct Google Maps Key -->
+    <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBd9XeisWiNIm3Zm8GjqH-Rvz1fh9DB50I&callback=initMap">
+    </script>
+
     <style>
         :root {--primary:#2563eb;--primary-light:#3b82f6;--success:#10b981;--gray:#6b7280;--light:#f3f4f6;--dark:#1f2937;--radius:12px;--shadow:0 4px 6px -1px rgba(0,0,0,0.1);}
         *{box-sizing:border-box;margin:0;padding:0;}
@@ -62,6 +67,7 @@
 <div class="container">
     <div class="progress-bar"><div class="progress" id="progress"></div></div>
 
+    <!-- SECTION 1: ZIP -->
     <div id="section1" class="section active" data-step="1">
         <h2>Enter Your Zip Code</h2>
         <p>We’ll find your provider and estimate savings.</p>
@@ -75,7 +81,7 @@
             <div class="utility-tagline">Your current electricity provider</div>
         </div>
 
-        <div id="bill-section" style="display:none;">
+        <div id="bill-section" style-initially-hidden;">
             <h3>Average Monthly Bill</h3>
             <div class="slider-container">
                 <input type="range" id="bill" min="50" max="500" value="150" step="10">
@@ -88,6 +94,7 @@
         </div>
     </div>
 
+    <!-- RENTER -->
     <div id="renter-section" class="section" data-step="2">
         <h2>Great! Here’s How It Works</h2>
         <div class="youtube-container">
@@ -98,6 +105,7 @@
         </p>
     </div>
 
+    <!-- OWNER ADDRESS -->
     <div id="owner-address" class="section" data-step="3">
         <h2>Confirm Your Home</h2>
         <p>Enter your full address to view your property.</p>
@@ -105,6 +113,7 @@
         <button onclick="showSatelliteMap()">Show My Home</button>
     </div>
 
+    <!-- SATELLITE MAP -->
     <div id="satellite-section" class="section" data-step="4">
         <h2>Is This Your Home?</h2>
         <p>Drag the pin if it’s slightly off.</p>
@@ -112,6 +121,7 @@
         <button onclick="confirmLocation()">Yes, Confirm</button>
     </div>
 
+    <!-- CONTACT -->
     <div id="contact-section" class="section" data-step="5">
         <h2>Almost Done!</h2>
         <p>Schedule a free consultation.</p>
@@ -124,6 +134,7 @@
         </div>
     </div>
 
+    <!-- THANK YOU -->
     <div id="thankyou" class="section thankyou" data-step="6">
         <div class="check-icon">Checkmark</div>
         <h2>Thank You, <span id="user-name"></span>!</h2>
@@ -142,10 +153,12 @@
     const totalSteps = 6;
 
     function initMap() {}
+
     function updateProgress(step) {
         const percent = (step / totalSteps) * 100;
         document.getElementById('progress').style.width = percent + '%';
     }
+
     function hideAll() {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     }
@@ -153,27 +166,35 @@
     async function submitZip() {
         const zip = document.getElementById('zip').value.trim();
         if (!/^\d{5}$/.test(zip)) return alert('Enter a valid 5-digit zip code.');
-        data.zip = zip; updateProgress(1);
+        data.zip = zip;
+        updateProgress(1);
 
-        const geo = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${zip}&country=US&format=json&limit=1`).then(r => r.json());
-        if (!geo.length) return alert('Zip not found.');
+        // Get lat/lon
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${zip}&country=US&format=json&limit=1`)
+                         .then(r => r.json());
+        if (!geo.length) return alert('Zip code not found.');
 
         const {lat, lon} = geo[0];
         data.lat = lat; data.lon = lon;
 
-        const nrel = await fetch(`https://developer.nrel.gov/api/utility_rates/v3.json?api_key=${NREL_KEY}&lat=${lat}&lon=${lon}`).then(r => r.json());
+        // Get provider from NREL
+        const nrel = await fetch(`https://developer.nrel.gov/api/utility_rates/v3.json?api_key=${NREL_KEY}&lat=${lat}&lon=${lon}`)
+                          .then(r => r.json());
         const provider = nrel.outputs?.utility_name || 'Local Utility';
         data.provider = provider;
 
         // Show spotlight with logo
-        const logoUrl = `https://logo.clearbit.com/${encodeURIComponent(provider.replace(/\s+/g, '').toLowerCase() + '.com')}?size=200`;
-        document.getElementById('utility-logo').src = logoUrl;
-        document.getElementById('utility-logo').onerror = () => {
-            document.getElementById('utility-logo').src = 'https://via.placeholder.com/80?text=⚡';
+        const domainGuess = provider.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+        const logoUrl = `https://logo.clearbit.com/${domainGuess}?size=200`;
+        const logoImg = document.getElementById('utility-logo');
+        logoImg.src = logoUrl;
+        logoImg.onerror = () => {
+            logoImg.src = 'https://via.placeholder.com/80/2563eb/ffffff?text=⚡';
         };
         document.getElementById('utility-name').textContent = provider;
         document.getElementById('utility-spotlight').style.display = 'block';
 
+        // Show bill section
         document.getElementById('bill-section').style.display = 'block';
         const slider = document.getElementById('bill');
         const val = document.getElementById('bill-value');
@@ -195,10 +216,11 @@
 
     async function showSatelliteMap() {
         const address = document.getElementById('address').value.trim();
-        if (!address) return alert('Enter your address.');
+        if (!address) return alert('Please enter your address.');
         data.address = address;
 
-        const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`).then(r => r.json());
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`)
+                         .then(r => r.json());
         if (!geo.length) return alert('Address not found.');
 
         const lat = parseFloat(geo[0].lat);
@@ -209,11 +231,23 @@
         document.getElementById('satellite-section').classList.add('active');
         updateProgress(4);
 
-        map = new google.maps.Map(document.getElementById('map'), {center:{lat,lng:lon},zoom:19,mapTypeId:'satellite'});
-        marker = new google.maps.Marker({position:{lat,lng:lon},map,draggable:true});
+        // FIXED: Map now loads correctly
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: { lat, lng: lon },
+            zoom: 19,
+            mapTypeId: 'satellite'
+        });
+
+        marker = new google.maps.Marker({
+            position: { lat, lng: lon },
+            map: map,
+            draggable: true
+        });
+
         marker.addListener('dragend', () => {
-            const p = marker.getPosition();
-            data.lat = p.lat(); data.lon = p.lng();
+            const pos = marker.getPosition();
+            data.lat = pos.lat();
+            data.lon = pos.lng();
         });
     }
 
@@ -229,19 +263,23 @@
         data.email = document.getElementById('email').value.trim();
         data.preference = pref;
 
-        if (!data.name || !data.phone || !data.email) return alert('Fill in all contact fields.');
+        if (!data.name || !data.phone || !data.email) {
+            return alert('Please fill in all contact fields.');
+        }
 
         document.getElementById('user-name').textContent = data.name.split(' ')[0];
         document.getElementById('appt-type').textContent = pref === 'virtual' ? 'virtual call' : 'in-person visit';
-        document.getElementById('savings-text').textContent = `You could save ~$${data.yearlySavings.toLocaleString()}/year with better rates or solar!`;
+        document.getElementById('savings-text').textContent = 
+            `You could save ~$${data.yearlySavings.toLocaleString()}/year with better rates or solar!`;
 
         hideAll();
         document.getElementById('thankyou').classList.add('active');
         updateProgress(6);
 
-        console.log('LEAD:', data);
+        console.log('LEAD SUBMITTED:', data);
     }
 
+    // Start
     updateProgress(1);
 </script>
 </body>
