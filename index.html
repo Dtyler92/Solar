@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utility Information Collector</title>
+    <style>
+        body {font-family: Arial, sans-serif; margin: 20px;}
+        .section {display: none;}
+        .active {display: block;}
+        #map {height: 400px; width: 100%;}
+        input, button {margin: 5px 0; display: block;}
+        button {cursor:pointer;}
+    </style>
+
+    <!-- Google Maps (replace YOUR_GOOGLE_API_KEY if you want a restricted key) -->
+    <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBd9XeisWiNIm3Zm8GjqH-Rvz1fh9DB50I&callback=initMap">
+    </script>
+</head>
+<body>
+
+<!-- ==== SECTION 1: ZIP ==== -->
+<div id="section1" class="section active">
+    <h2>Enter Your Zip Code</h2>
+    <input type="text" id="zip" placeholder="Zip Code" maxlength="5">
+    <button onclick="submitZip()">Submit</button>
+    <p id="provider"></p>
+
+    <div id="bill-section" style="display:none;">
+        <h3>Average Monthly Utility Bill</h3>
+        <input type="range" id="bill" min="50" max="500" value="150" step="10">
+        <span id="bill-value">150</span> USD
+        <div style="margin-top:15px;">
+            <button onclick="selectType('renter')">Renter</button>
+            <button onclick="selectType('owner')">Owner</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==== SECTION 2: RENTER ==== -->
+<div id="renter-section" class="section">
+    <h2>Renter Information</h2>
+    <iframe width="560" height="315"
+            src="https://www.youtube.com/embed/3u5DALLHZDI?si=nORXUVcpWtIYAAQF"
+            title="YouTube video" frameborder="0" allowfullscreen></iframe>
+    <p><a href="https://get.thinkenergy.com/Tourbillon" target="_blank">Visit External Website</a></p>
+</div>
+
+<!-- ==== SECTION 3: OWNER ADDRESS ==== -->
+<div id="owner-address" class="section">
+    <h2>Enter Your Address</h2>
+    <input type="text" id="address" placeholder="Full Address">
+    <button onclick="showSatelliteMap()">Confirm Address</button>
+</div>
+
+<!-- ==== SECTION 4: SATELLITE MAP ==== -->
+<div id="satellite-section" class="section">
+    <h2>Confirm Your Home Location</h2>
+    <div id="map"></div>
+    <p>Drag the marker if the pin is slightly off.</p>
+    <button onclick="confirmLocation()">Confirm</button>
+</div>
+
+<!-- ==== SECTION 5: CONTACT ==== -->
+<div id="contact-section" class="section">
+    <h2>Contact Information</h2>
+    <input type="text" id="name" placeholder="Name">
+    <input type="tel" id="phone" placeholder="Phone Number">
+    <input type="email" id="email" placeholder="Email">
+    <div style="margin-top:15px;">
+        <button onclick="selectPreference('virtual')">Virtual Appointment</button>
+        <button onclick="selectPreference('inperson')">In Person</button>
+    </div>
+</div>
+
+<script>
+    let map, marker;
+    const data = {};
+
+    // ---------- ZIP → PROVIDER ----------
+    async function submitZip() {
+        const zip = document.getElementById('zip').value.trim();
+        if (!/^\d{5}$/.test(zip)) return alert('Enter a 5-digit zip code.');
+
+        data.zip = zip;
+
+        // 1. Get lat/lon from OpenStreetMap Nominatim
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${zip}&country=US&format=json&limit=1`)
+                         .then(r => r.json());
+
+        if (!geo.length) return alert('Zip code not found.');
+
+        const {lat, lon} = geo[0];
+        data.lat = lat; data.lon = lon;
+
+        // 2. Get utility name from NREL
+        // ----> **GET YOUR OWN KEY** at https://developer.nrel.gov/signup/
+        const NREL_KEY = 'YOUR_NREL_API_KEY_HERE';   // <<<--- REPLACE!
+        const nrel = await fetch(`https://developer.nrel.gov/api/utility_rates/v3.json?api_key=${NREL_KEY}&lat=${lat}&lon=${lon}`)
+                          .then(r => r.json());
+
+        const provider = nrel.outputs?.utility_name || 'Unknown Provider';
+        document.getElementById('provider').textContent = `Electricity Provider: ${provider}`;
+        data.provider = provider;
+
+        // Show bill slider
+        document.getElementById('bill-section').style.display = 'block';
+
+        // Live slider value
+        const slider = document.getElementById('bill');
+        const val    = document.getElementById('bill-value');
+        val.textContent = slider.value;
+        slider.oninput = () => val.textContent = slider.value;
+    }
+
+    // ---------- RENTER / OWNER ----------
+    function selectType(type) {
+        data.bill = document.getElementById('bill').value;
+        data.type = type;
+        hideAll();
+        if (type === 'renter') {
+            document.getElementById('renter-section').classList.add('active');
+        } else {
+            document.getElementById('owner-address').classList.add('active');
+        }
+    }
+
+    // ---------- ADDRESS → SATELLITE ----------
+    async function showSatelliteMap() {
+        const address = document.getElementById('address').value.trim();
+        if (!address) return alert('Enter your full address.');
+
+        data.address = address;
+
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`)
+                         .then(r => r.json());
+
+        if (!geo.length) return alert('Address not found.');
+
+        const lat = parseFloat(geo[0].lat);
+        const lon = parseFloat(geo[0].lon);
+        data.lat = lat; data.lon = lon;
+
+        hideAll();
+        document.getElementById('satellite-section').classList.add('active');
+
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: {lat, lng: lon},
+            zoom: 19,
+            mapTypeId: 'satellite'
+        });
+
+        marker = new google.maps.Marker({
+            position: {lat, lng: lon},
+            map,
+            draggable: true
+        });
+
+        marker.addListener('dragend', () => {
+            const p = marker.getPosition();
+            data.lat = p.lat(); data.lon = p.lng();
+        });
+    }
+
+    function confirmLocation() {
+        hideAll();
+        document.getElementById('contact-section').classList.add('active');
+    }
+
+    // ---------- CONTACT ----------
+    function selectPreference(pref) {
+        data.name = document.getElementById('name').value.trim();
+        data.phone = document.getElementById('phone').value.trim();
+        data.email = document.getElementById('email').value.trim();
+        data.preference = pref;
+
+        if (!data.name || !data.phone || !data.email) {
+            return alert('Please fill in Name, Phone and Email.');
+        }
+
+        console.log('SUBMITTED DATA →', data);
+        alert('Thank you! Data is in the browser console (F12).');
+        // ----> In production send to a backend (Formspree, Netlify Functions, etc.)
+    }
+
+    // ---------- HELPERS ----------
+    function hideAll() {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    }
+
+    // Google Maps init (required even if empty)
+    function initMap() {}
+</script>
+
+</body>
+</html>
